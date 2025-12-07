@@ -2,7 +2,7 @@ import csv
 import unicodedata
 
 import streamlit as st
-from cltk import NLP
+from cltk.nlp import NLP
 
 # ----------------- CONFIGURAZIONE PAGINA ----------------- #
 
