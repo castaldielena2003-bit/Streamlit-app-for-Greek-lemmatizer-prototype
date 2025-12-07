@@ -2,7 +2,15 @@ import csv
 import unicodedata
 
 import streamlit as st
-from cltk.nlp import NLP
+
+# ----------------- TENTATIVO DI IMPORT CLTK (OPZIONALE) ----------------- #
+try:
+    from cltk.lemmatize.grc import GreekBackoffLemmatizer
+    lemmatizer = GreekBackoffLemmatizer()
+    HAS_CLTK = True
+except Exception:
+    lemmatizer = None
+    HAS_CLTK = False
 
 # ----------------- CONFIGURAZIONE PAGINA ----------------- #
 
@@ -176,25 +184,28 @@ def carica_csv(percorso: str):
     return diz, lemmi
 
 
-@st.cache_resource
-def get_cltk():
-    return NLP(language="ancient_greek", backend="stanza")
-
-
-def cltk_lemmas(forma: str):
-    nlp = get_cltk()
-    doc = nlp.analyze(text=forma)
-    if not hasattr(doc, "words") or doc.words is None:
-        return []
-    return sorted({w.lemma for w in doc.words if getattr(w, "lemma", None)})
-
-
 @st.cache_data
 def load_data():
     try:
         return carica_csv("forme_lemmi.csv")
     except FileNotFoundError:
         return {}, set()
+
+
+def cltk_lemmas(forma: str):
+    """
+    Restituisce una lista di lemmi suggeriti da CLTK, se disponibile.
+    Se CLTK non è disponibile, restituisce una lista vuota.
+    """
+    if not HAS_CLTK or lemmatizer is None:
+        return []
+
+    try:
+        pairs = lemmatizer.lemmatize(forma)
+        # set per eliminare duplicati, poi lista ordinata
+        return sorted({lemma for (_form, lemma) in pairs if lemma})
+    except Exception:
+        return []
 
 
 diz_forme, lemmi_olivetti = load_data()
@@ -289,10 +300,16 @@ if forma_input:
             lemmi_auto = cltk_lemmas(forma_input)
 
             if not lemmi_auto:
-                st.markdown(
-                    "<div class='msg'>Il motore automatico non ha proposto alcun lemma.</div>",
-                    unsafe_allow_html=True,
-                )
+                if not HAS_CLTK:
+                    st.markdown(
+                        "<div class='msg'>CLTK non è disponibile in questo ambiente: nessun suggerimento automatico può essere fornito.</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        "<div class='msg'>Il motore automatico non ha proposto alcun lemma.</div>",
+                        unsafe_allow_html=True,
+                    )
             else:
                 acc = [l for l in lemmi_auto if l in lemmi_olivetti]
                 ext = [l for l in lemmi_auto if l not in lemmi_olivetti]
@@ -326,7 +343,7 @@ st.markdown(
 
     <p>Il Vocabolario Greco-Italiano Olivetti fornisce il lemmario di riferimento e il collegamento lessicografico (URL), ma non contiene forme flesse.</p>
 
-    <p>Il motore automatico (CLTK) è usato come supporto: i suoi suggerimenti sono classificati come ACCEPTABLE se compatibili con il lemario del dataset, altrimenti come EXTERNAL.</p>
+    <p>Il motore automatico (CLTK), quando disponibile, è usato come supporto: i suoi suggerimenti sono classificati come ACCEPTABLE se compatibili con il lemario del dataset, altrimenti come EXTERNAL.</p>
     """,
     unsafe_allow_html=True,
 )
